@@ -1,2 +1,3 @@
-# catena
-The links that associate us
+# Catena
+
+**The links that associate us.**
