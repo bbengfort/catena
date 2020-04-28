@@ -1,8 +1,8 @@
+// Use with go generate to create database migrations in the migrations folder.
 package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"go/format"
 	"html/template"
@@ -11,7 +11,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bbengfort/catena"
 	"github.com/bbengfort/catena/migrations"
+	"github.com/urfave/cli"
 )
 
 const bindataFile string = "migrations.go"
@@ -32,18 +34,40 @@ var conv = map[string]interface{}{"conv": fmtByteSlice}
 var tmpl = template.Must(template.New("").Funcs(conv).Parse(bindata))
 
 func main() {
-	names, err := filepath.Glob("*.sql")
-	checkErr(err, "could not list files: %s")
+	// Instantiate the CLI application
+	app := cli.NewApp()
+	app.Name = "makemigrations"
+	app.Version = catena.PackageVersion
+	app.Usage = "generate migrations from SQL files in the migrations folder"
+	app.UsageText = "go generate ./..."
+	app.Action = makemigrations
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "d, debug",
+			Usage: "print the generated file and exit",
+		},
+	}
+
+	app.Run(os.Args)
+}
+
+func makemigrations(c *cli.Context) (err error) {
+	var names []string
+	if names, err = filepath.Glob("*.sql"); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not list files: %s", err), 1)
+	}
 
 	if len(names) == 0 {
-		checkErr(errors.New("no migrations to generate"), "")
+		return cli.NewExitError("no migrations to generate, did you run go generate?", 2)
 	}
 
 	// Parse the migrations from their SQL files
 	objs := make([]migrations.Migration, 0, len(names))
 	for _, name := range names {
-		m, err := migrations.Parse(name)
-		checkErr(err, "could not parse %q: %s", name)
+		var m *migrations.Migration
+		if m, err = migrations.Parse(name); err != nil {
+			return cli.NewExitError(fmt.Errorf("could not parse %q: %s", name, err), 1)
+		}
 		objs = append(objs, *m)
 	}
 
@@ -54,36 +78,34 @@ func main() {
 	builder := &bytes.Buffer{}
 
 	// Execute the template
-	err = tmpl.Execute(builder, objs)
-	checkErr(err, "could not execute template: %s")
+	if err = tmpl.Execute(builder, objs); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not execute template: %s", err), 1)
+	}
 
-	// fmt.Println(builder.String())
+	if c.Bool("debug") {
+		fmt.Println(builder.String())
+		return nil
+	}
 
 	// Format the generated code
-	data, err := format.Source(builder.Bytes())
-	checkErr(err, "could not format code: %s")
+	var data []byte
+	if data, err = format.Source(builder.Bytes()); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not format code: %s", err), 1)
+	}
 
 	// Create the generated code file
-	f, err := os.Create(bindataFile)
-	checkErr(err, "could not create %s: %s", bindataFile)
+	var f *os.File
+	if f, err = os.Create(bindataFile); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not create %s: %s", bindataFile, err), 1)
+	}
 	defer f.Close()
 
-	_, err = f.Write(data)
-	checkErr(err, "could not write data: %s")
+	if _, err = f.Write(data); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not write data: %s", err), 1)
+	}
 
 	fmt.Printf("wrote %d generated migrations to %s\n", len(objs), bindataFile)
-}
-
-func checkErr(err error, msg string, args ...interface{}) {
-	if err != nil {
-		if msg != "" {
-			args = append(args, err)
-			fmt.Fprintf(os.Stderr, msg, args...)
-		} else {
-			fmt.Fprintln(os.Stderr, err.Error())
-		}
-		os.Exit(1)
-	}
+	return nil
 }
 
 func fmtByteSlice(s string) string {

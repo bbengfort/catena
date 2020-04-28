@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS migrations (
     "active" boolean NOT NULL DEFAULT false,
     "applied" TIMESTAMP WITH TIME ZONE,
     "created" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY ("revision"),
+    PRIMARY KEY ("revision")
 ) WITHOUT OIDS;
 
 COMMENT ON TABLE "migrations" IS 'Manages the state of database by enabling migrations and rollbacks';
