@@ -12,13 +12,16 @@ package migrations
 
 import (
 	"bufio"
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -199,6 +202,55 @@ func refreshTx(tx *sql.Tx) (err error) {
 	}
 
 	return nil
+}
+
+var sqltempl = template.Must(template.New("").Parse(`-- Revision {{ .Revision }} generated on {{ .Timestamp }}
+-- migrate: up
+-- insert up migration sql here
+
+-- migrate: down
+-- insert down migration sql here
+`))
+
+// New creates a new migration file from a template for the next revision and checks to
+// make sure that it is valid. Specify the migrations directory for verification.
+func New(name, dir string) (path string, err error) {
+	if name == "" {
+		name = fmt.Sprintf("auto_%s", time.Now().Format("200601021504"))
+	}
+
+	r := migrations[len(migrations)-1].Revision + 1
+
+	var matches []string
+	if matches, err = filepath.Glob(filepath.Join(dir, fmt.Sprintf("%04d_*.sql", r))); err != nil {
+		return "", fmt.Errorf("could not check for duplicate revisions: %s", err)
+	} else if len(matches) > 0 {
+		return "", fmt.Errorf("a migration with revision %d already exists: %s (did you run go generate?)", r, matches[0])
+	}
+
+	name = strings.Replace(name, " ", "_", -1)
+	path = filepath.Join(dir, fmt.Sprintf("%04d_%s.sql", r, name))
+
+	builder := &bytes.Buffer{}
+	ctx := struct {
+		Revision  int64
+		Timestamp string
+	}{Revision: r, Timestamp: time.Now().Format("2006-01-02 15:04")}
+	if err = sqltempl.Execute(builder, ctx); err != nil {
+		return "", fmt.Errorf("could not execute sql migration template: %s", err)
+	}
+
+	var f *os.File
+	if f, err = os.Create(path); err != nil {
+		return "", fmt.Errorf("could not create %s: %s", path, err)
+	}
+	defer f.Close()
+
+	if _, err = f.Write(builder.Bytes()); err != nil {
+		return "", fmt.Errorf("could not write sql migration template: %s", err)
+	}
+
+	return path, nil
 }
 
 // Migration combines the information about the state of the database and how it has

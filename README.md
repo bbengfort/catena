@@ -9,7 +9,13 @@ The schema of the database is managed through migration files that can be applie
 
 > **NOTE**: Currently only PostgreSQL is tested with this method.
 
-To create a migration, create a new SQL file in the `migrations` folder with the format `XXXX_my_migration.sql` where the `XXXX` should be the next migration number in sequence and the text describes the migration. In the SQL file you should have the following two comments:
+To create a migration, create a new SQL file in the `migrations` folder with the format `XXXX_my_migration.sql` where the `XXXX` should be the next migration number in sequence and the text describes the migration. You can use the catena command to do this as long as you're in the project root:
+
+```
+$ go run ./cmd/catena --new my revision name
+```
+
+In the SQL file you should have the following two comments:
 
 ```sql
 -- migrate: up
