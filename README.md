@@ -1,5 +1,10 @@
 # Catena
 
+[![GoDoc](https://godoc.org/github.com/bbengfort/catena?status.svg)](https://godoc.org/github.com/bbengfort/catena)
+[![Go Report Card](https://goreportcard.com/badge/github.com/bbengfort/catena)](https://goreportcard.com/report/github.com/bbengfort/catena)
+[![Build Status](https://travis-ci.com/bbengfort/catena.svg?branch=master)](https://travis-ci.com/bbengfort/catena)
+
+
 **The links that associate us.**
 
 
