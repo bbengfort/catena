@@ -50,7 +50,7 @@ test:
 # Target for testing in continuous integration
 citest:
 	$(info $(BM) running CI tests with randomization and race …)
-	$(GOTEST) -bench=. -v --cover --race ./...
+	$(GOTEST) -bench=. -v --cover -coverprofile=coverage.txt -covermode=atomic --race ./...
 
 # Run Godoc server and open browser to the documentation
 doc:
@@ -64,3 +64,4 @@ clean:
 	$(info $(RM) cleaning up build …)
 	@ $(GOCLEAN)
 	@ find . -name "*.coverprofile" -print0 | xargs -0 rm -rf
+	@ find . -name "coverage.text" -print0 | xargs -0 rm -rf
