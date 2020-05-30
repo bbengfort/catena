@@ -8,5 +8,5 @@ require (
 	github.com/lib/pq v1.6.0
 	github.com/stretchr/testify v1.6.0
 	github.com/urfave/cli v1.22.4
-	gopkg.in/urfave/cli.v1 v1.20.0
+	gopkg.in/yaml.v2 v2.2.2
 )

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bbengfort/catena/config"
 	"github.com/julienschmidt/httprouter"
 
 	// register database drivers
@@ -27,21 +28,25 @@ const Version = "v0.1"
 const ctjson = "application/json; charset=utf-8"
 
 // New creates a Catena API server with the specified options and returns it.
-func New() (api *Catena, err error) {
+func New(conf config.Config) (api *Catena, err error) {
+	// TODO: validate the config
+
 	// Implement basic requests logger
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 
+	// TODO: add config to routes
 	mux := Routes()
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         conf.BindAddr(),
 		Handler:      mux,
-		ErrorLog:     logger,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  15 * time.Second,
+		ErrorLog:     logger, // TODO: does this call Errorf?
+		ReadTimeout:  conf.ReadTimeout,
+		WriteTimeout: conf.WriteTimeout,
+		IdleTimeout:  conf.IdleTimeout,
 	}
 
 	return &Catena{
+		conf:    conf,
 		mux:     mux,
 		server:  server,
 		logger:  logger,
@@ -53,6 +58,7 @@ func New() (api *Catena, err error) {
 // Catena is an API server.
 type Catena struct {
 	sync.RWMutex
+	conf    config.Config
 	db      *sql.DB
 	mux     *httprouter.Router
 	server  *http.Server
@@ -67,7 +73,7 @@ func (c *Catena) Serve() (err error) {
 	c.setHealth(true)
 
 	// capture os signals to gracefully shutdown
-	c.signals()
+	c.osSignals()
 
 	// listen and serve
 	// TODO: handle serveTLS
@@ -105,7 +111,7 @@ func (c *Catena) setHealth(health bool) {
 	c.Unlock()
 }
 
-func (c *Catena) signals() {
+func (c *Catena) osSignals() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 	go func() {

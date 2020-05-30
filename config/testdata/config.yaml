@@ -1,0 +1,12 @@
+domain: catena.dev
+addr: 0.0.0.0
+port: 443
+notls: true
+dburl: postgres://user@localhost:5432/db
+routes:
+  redirecttrailingslash: true
+  redirectfixedpath: true
+  handlemethodnotallowed: true
+readtimeout: 1m0s
+writetimeout: 500ms
+idletimeout: 3h0m0s

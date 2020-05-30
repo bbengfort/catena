@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/bbengfort/catena"
+	"github.com/bbengfort/catena/config"
 	"github.com/bbengfort/catena/migrations"
 	"github.com/joho/godotenv"
-	"gopkg.in/urfave/cli.v1"
+	"github.com/urfave/cli"
+	"gopkg.in/yaml.v2"
 
 	// use postgres for the test database
 	_ "github.com/lib/pq"
@@ -24,17 +26,36 @@ func main() {
 	app.Name = "catena"
 	app.Version = catena.Version
 	app.Usage = "catena server and server utilities"
+	app.Before = makeConfig
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "c, conf",
+			Usage:  "specify a path to a configuration file for loading",
+			EnvVar: "CATENA_CONF_PATH",
+		},
+	}
 	app.Commands = []cli.Command{
 		{
 			Name:     "serve",
 			Usage:    "run the catena API server",
 			Action:   serve,
+			Before:   updateConfig,
 			Category: "server",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:   "a, addr",
 					Usage:  "the address to bind the catena server on",
-					EnvVar: "CATENA_ENDPOINT",
+					EnvVar: "CATENA_BIND_ADDR",
+				},
+				cli.UintFlag{
+					Name:   "p, port",
+					Usage:  "the port the catena server listens on",
+					EnvVar: "CATENA_PORT",
+				},
+				cli.BoolFlag{
+					Name:   "S, no-tls",
+					Usage:  "do not run the server with TLS security",
+					EnvVar: "CATENA_NO_TLS",
 				},
 				cli.StringFlag{
 					Name:   "D, db",
@@ -44,10 +65,23 @@ func main() {
 			},
 		},
 		{
+			Name:     "configure",
+			Usage:    "read or edit the current catena configuration",
+			Action:   configure,
+			Category: "server",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "p, paths",
+					Usage: "list the discovered configuration paths and exit",
+				},
+			},
+		},
+		{
 			Name:      "db:revision",
 			Usage:     "print the current migration status of the database",
 			ArgsUsage: "[-n revision name]",
 			Action:    revision,
+			Before:    updateConfig,
 			Category:  "database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
@@ -71,6 +105,7 @@ func main() {
 			Usage:    "migrate (or rollback) the database to the latest revision",
 			Action:   migrate,
 			Category: "database",
+			Before:   updateConfig,
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:   "D, db",
@@ -93,12 +128,62 @@ func main() {
 }
 
 //===========================================================================
+// Setup and Teardown
+//===========================================================================
+
+// global configuration for all CLI commands
+var conf config.Config
+
+func makeConfig(c *cli.Context) (err error) {
+	// Load the configuration from the environment
+	if conf, err = config.New(); err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	// If a path to the configuration is provided, loaded it
+	if confpath := c.String("conf"); confpath != "" {
+		if conf, err = conf.LoadFile(confpath); err != nil {
+			return cli.NewExitError(err, 1)
+		}
+	} else {
+		// Otherwise, attempt to load the configuration from the search path
+		if conf, err = conf.LoadSystem(); err != nil {
+			return cli.NewExitError(err, 1)
+		}
+	}
+
+	return nil
+}
+
+func updateConfig(c *cli.Context) (err error) {
+	// Update the config from the context manually for CLI flags
+	// TODO: should we do this with reflection as well?
+	if addr := c.String("addr"); addr != "" {
+		conf.Addr = addr
+	}
+
+	if port := c.Uint("port"); port != 0 {
+		conf.Port = uint16(port)
+	}
+
+	if noTLS := c.Bool("no-tls"); noTLS {
+		conf.NoTLS = true
+	}
+
+	if db := c.String("db"); db != "" {
+		conf.DBURL = db
+	}
+
+	return nil
+}
+
+//===========================================================================
 // Server Commands
 //===========================================================================
 
 func serve(c *cli.Context) (err error) {
 	var api *catena.Catena
-	if api, err = catena.New(); err != nil {
+	if api, err = catena.New(conf); err != nil {
 		return cli.NewExitError(err, 1)
 	}
 
@@ -106,6 +191,38 @@ func serve(c *cli.Context) (err error) {
 		return cli.NewExitError(err, 1)
 	}
 
+	return nil
+}
+
+func configure(c *cli.Context) (err error) {
+	if c.Bool("paths") {
+		if path := c.GlobalString("conf"); path != "" {
+			fmt.Printf("*%s\n", path)
+			return nil
+		}
+
+		paths := config.Find()
+		if len(paths) == 0 {
+			fmt.Println("no system configuration files")
+		} else {
+			for i, path := range paths {
+				if i == 0 {
+					fmt.Printf("*%s\n", path)
+				} else {
+					fmt.Println(path)
+				}
+			}
+		}
+		return nil
+	}
+
+	// TODO: specify output format
+	// TODO: allow user to edit with vim
+	data, err := yaml.Marshal(conf)
+	if err != nil {
+		return cli.NewExitError(err, 1)
+	}
+	fmt.Println(string(data))
 	return nil
 }
 
@@ -125,13 +242,13 @@ func revision(c *cli.Context) (err error) {
 		return
 	}
 
-	var db *sql.DB
-	if uri := c.String("db"); uri != "" {
-		if db, err = sql.Open("postgres", uri); err != nil {
-			return cli.NewExitError(fmt.Errorf("could not connect to database: %s", err), 1)
-		}
-	} else {
+	if conf.DBURL == "" {
 		return cli.NewExitError("could not connect: no database url specified", 1)
+	}
+
+	var db *sql.DB
+	if db, err = sql.Open("postgres", conf.DBURL); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not connect to database: %s", err), 1)
 	}
 
 	var m migrations.Migration
@@ -152,13 +269,13 @@ func revision(c *cli.Context) (err error) {
 }
 
 func migrate(c *cli.Context) (err error) {
-	var db *sql.DB
-	if uri := c.String("db"); uri != "" {
-		if db, err = sql.Open("postgres", uri); err != nil {
-			return cli.NewExitError(fmt.Errorf("could not connect to database: %s", err), 1)
-		}
-	} else {
+	if conf.DBURL == "" {
 		return cli.NewExitError("could not connect: no database url specified", 1)
+	}
+
+	var db *sql.DB
+	if db, err = sql.Open("postgres", conf.DBURL); err != nil {
+		return cli.NewExitError(fmt.Errorf("could not connect to database: %s", err), 1)
 	}
 
 	var n int
