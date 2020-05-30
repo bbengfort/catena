@@ -37,7 +37,7 @@ func main() {
 	// Instantiate the CLI application
 	app := cli.NewApp()
 	app.Name = "makemigrations"
-	app.Version = catena.PackageVersion
+	app.Version = catena.Version
 	app.Usage = "generate migrations from SQL files in the migrations folder"
 	app.UsageText = "go generate ./..."
 	app.Action = makemigrations

@@ -22,7 +22,7 @@ func main() {
 	// Instantiate the CLI application
 	app := cli.NewApp()
 	app.Name = "catena"
-	app.Version = catena.PackageVersion
+	app.Version = catena.Version
 	app.Usage = "catena server and server utilities"
 	app.Commands = []cli.Command{
 		{
@@ -97,7 +97,16 @@ func main() {
 //===========================================================================
 
 func serve(c *cli.Context) (err error) {
-	return cli.NewExitError("server not implemented yet", 42)
+	var api *catena.Catena
+	if api, err = catena.New(); err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	if err = api.Serve(); err != nil {
+		return cli.NewExitError(err, 1)
+	}
+
+	return nil
 }
 
 //===========================================================================

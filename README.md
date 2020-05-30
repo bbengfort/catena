@@ -39,3 +39,9 @@ $ go generate ./...
 ```
 
 This will generate the migrations code from the SQL files and allow you to apply it with the `catena migrate` command.
+
+## Server Mux
+
+The goal of catena is to do as much as possible from scratch in order to demonstrate an extremely lightweight web api server and concepts such as database migration, context handling, logging, tracing, etc. This is primarily for the purposes of my deeper exploration of Go rather than to develop a production-grade API.
+
+When it comes to route multiplexing however, the `http.ServeMux` is an excellent example of static routing but does not scale well to the dynamic routing required by a REST API. In the past I've attempted to implement a prefix trie for this routing, but in order to focus on other efforts in this code, I've selected [httprouter](https://github.com/julienschmidt/httprouter) based on its lightweight tree structure and [benchmarks](https://github.com/julienschmidt/go-http-routing-benchmark). Potentially in the future I will attempt to write my own radix tree structure and benchmark it specifically to this API - but for now it provides the smallest abstraction set and allows me to focus on middleware and the API itself.
