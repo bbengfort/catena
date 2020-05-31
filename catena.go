@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bbengfort/catena/config"
+	"github.com/bbengfort/catena/logs"
 	"github.com/julienschmidt/httprouter"
 
 	// register database drivers
@@ -32,14 +33,22 @@ func New(conf config.Config) (api *Catena, err error) {
 	// TODO: validate the config
 
 	// Implement basic requests logger
-	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
+	// TODO: add logger config to config
+	logger := logs.New("catena")
+	logger.EnableColors()
+	logger.SetBackend(os.Stdout)
+	logger.SetLogLevel(logs.LevelInfo)
 
 	// TODO: add config to routes
+	// TODO: better middleware handling
 	mux := Routes()
+	handler := logs.NewHTTPLogger("http", mux)
+	handler.EnableColors()
+
 	server := &http.Server{
 		Addr:         conf.BindAddr(),
-		Handler:      mux,
-		ErrorLog:     logger, // TODO: does this call Errorf?
+		Handler:      handler,
+		ErrorLog:     log.New(os.Stderr, "[http] ", log.LstdFlags),
 		ReadTimeout:  conf.ReadTimeout,
 		WriteTimeout: conf.WriteTimeout,
 		IdleTimeout:  conf.IdleTimeout,
@@ -62,7 +71,7 @@ type Catena struct {
 	db      *sql.DB
 	mux     *httprouter.Router
 	server  *http.Server
-	logger  *log.Logger
+	logger  *logs.Logger
 	healthy bool
 	done    chan bool
 }
@@ -77,20 +86,20 @@ func (c *Catena) Serve() (err error) {
 
 	// listen and serve
 	// TODO: handle serveTLS
-	c.logger.Println("server is ready to handle requests at", "http://localhost:8080")
+	c.logger.Status("server is ready to handle requests at %s", c.conf.Endpoint())
 	if err = c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 
 	// wait until shutdown is complete
 	<-c.done
-	c.logger.Println("server(s) stopped")
+	c.logger.Status("server(s) stopped")
 	return nil
 }
 
 // Shutdown the API server gracefully
 func (c *Catena) Shutdown() (err error) {
-	c.logger.Println("shutting down server(s)...")
+	c.logger.Caution("shutting down server(s)...")
 	c.setHealth(false)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
